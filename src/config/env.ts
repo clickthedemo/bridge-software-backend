@@ -23,6 +23,8 @@ const envSchema = z.object({
 
     API_PORT: z.coerce.number().int().positive().default(4000),
 
+    PORT: z.coerce.number().int().positive().optional(),
+
     API_URL: z.url().default("http://localhost:4000"),
 
     WEB_URL: z.url().default("http://localhost:5173"),

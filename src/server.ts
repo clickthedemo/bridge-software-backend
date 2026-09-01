@@ -1,8 +1,10 @@
 import { env } from "./config/index.js";
 import { app } from "./app.js";
 
-app.listen(env.API_PORT, () => {
+const port = env.PORT ?? env.API_PORT;
+
+app.listen(port, () => {
     console.log(
-        `BRIDGE API listening on ${env.API_URL}`
+        `BRIDGE API listening on port ${port}`
     );
 });
