@@ -20,6 +20,15 @@ app.use(
 
 app.use(express.json({ limit: "1mb" }));
 
+app.get("/", (_req, res) => {
+    res.status(200).json({
+        service: "thebridge-api",
+        status: "ok",
+        api: "/api/v1",
+        health: "/health"
+    });
+});
+
 app.get("/health", (_req, res) => {
     res.status(200).json({
         status: "ok",
