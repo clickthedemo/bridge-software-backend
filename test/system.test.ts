@@ -17,6 +17,7 @@ process.env.EMAIL_VERIFICATION_REDIRECT_URL =
 process.env.PASSWORD_RESET_REDIRECT_URL = "http://localhost:5173/reset-password";
 
 const { app } = await import("../src/app.js");
+const { corsOriginsSchema } = await import("../src/config/env.js");
 let server: Server;
 let baseUrl: string;
 
@@ -46,6 +47,24 @@ test("v1 health is public and stable", async () => {
         status: "ok",
         service: "bridge-api"
     });
+});
+
+test("CORS origin configuration trims whitespace and ignores empty entries", () => {
+    assert.deepEqual(
+        corsOriginsSchema.parse(
+            " http://localhost:3000, ,https://bridge-connected-signal-dev.netlify.app "
+        ),
+        [
+            "http://localhost:3000",
+            "https://bridge-connected-signal-dev.netlify.app"
+        ]
+    );
+});
+
+test("CORS origin configuration rejects empty, malformed, and wildcard values", () => {
+    for (const value of ["", " , ", "not-a-url", "*", "https://*.example.com"]) {
+        assert.equal(corsOriginsSchema.safeParse(value).success, false);
+    }
 });
 
 test("v1 version is public and does not expose sensitive configuration", async () => {
@@ -94,6 +113,7 @@ test("allowed CORS preflight supports Authorization and required methods", async
         }
     });
     assert.equal(response.status, 204);
+    assert.equal(response.headers.has("access-control-allow-credentials"), false);
     assert.equal(
         response.headers.get("access-control-allow-origin"),
         "http://localhost:3000"
