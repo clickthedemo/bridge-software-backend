@@ -24,10 +24,14 @@ import {
 
 const router = Router();
 
-const authFailureStatus = (error: AuthenticationServiceError): number => {
+export const authFailureStatus = (error: AuthenticationServiceError): number => {
     switch (error.code) {
-        case "AUTH_LOGIN_FAILED":
+        case "INVALID_CREDENTIALS":
             return 401;
+        case "EMAIL_NOT_VERIFIED":
+            return 403;
+        case "AUTH_RATE_LIMITED":
+            return 429;
         case "AUTH_PROVIDER_UNAVAILABLE":
             return 503;
         default:
@@ -40,12 +44,19 @@ const sendAuthFailure = (
     error: unknown
 ): void => {
     if (error instanceof AuthenticationServiceError) {
+        const messages: Partial<Record<typeof error.code, string>> = {
+            AUTH_RATE_LIMITED:
+                "Too many authentication requests. Please try again later.",
+            EMAIL_NOT_VERIFIED: "Please verify your email before signing in.",
+            INVALID_CREDENTIALS: "Invalid email or password.",
+            AUTH_PROVIDER_UNAVAILABLE:
+                "Authentication service is temporarily unavailable."
+        };
         res.status(authFailureStatus(error)).json({
             error: error.code,
             message:
-                error.code === "AUTH_PROVIDER_UNAVAILABLE"
-                    ? "Authentication service is temporarily unavailable."
-                    : "The authentication request could not be completed."
+                messages[error.code] ??
+                "The authentication request could not be completed."
         });
         return;
     }
