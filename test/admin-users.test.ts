@@ -5,6 +5,7 @@ import type { User } from "@supabase/supabase-js";
 process.env.NODE_ENV = "test";
 process.env.SUPABASE_URL = "https://test-project.supabase.co";
 process.env.SUPABASE_ANON_KEY = "test-anon-key";
+process.env.CORS_ORIGINS = "http://localhost:3000";
 process.env.SUPABASE_SERVICE_ROLE_KEY = "test-service-role-key";
 process.env.EMAIL_VERIFICATION_REDIRECT_URL =
     "https://frontend.example.test/login?verified=true";

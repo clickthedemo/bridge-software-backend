@@ -16,6 +16,31 @@ const optionalEinEncryptionKey = z.preprocess(
     }, "EIN_ENCRYPTION_KEY must be a base64 encoded 32-byte key.").optional()
 );
 
+export const corsOriginsSchema = z.string().transform((value, context) => {
+    const origins = value
+        .split(",")
+        .map((origin) => origin.trim())
+        .filter(Boolean);
+
+    const hasInvalidOrigin = origins.some((origin) => {
+        if (!z.url().safeParse(origin).success || origin.includes("*")) return true;
+
+        const parsed = new URL(origin);
+        return parsed.origin !== origin || parsed.username !== "" || parsed.password !== "";
+    });
+
+    if (origins.length === 0 || hasInvalidOrigin) {
+        context.addIssue({
+            code: "custom",
+            message:
+                "CORS_ORIGINS must contain one or more comma-separated URL origins."
+        });
+        return z.NEVER;
+    }
+
+    return origins;
+});
+
 const envSchema = z.object({
     NODE_ENV: z
         .enum(["development", "test", "production"])
@@ -28,6 +53,12 @@ const envSchema = z.object({
     API_URL: z.url().default("http://localhost:4000"),
 
     WEB_URL: z.url().default("http://localhost:5173"),
+
+    CORS_ORIGINS: corsOriginsSchema,
+
+    DEPLOYMENT_ENVIRONMENT: z
+        .enum(["development", "test", "staging", "production"])
+        .optional(),
 
     SUPABASE_URL: z.url(),
 

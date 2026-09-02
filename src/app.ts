@@ -13,8 +13,17 @@ app.use(helmet());
 
 app.use(
     cors({
-        origin: env.WEB_URL,
-        credentials: true
+        origin: (origin, callback) => {
+            // Non-browser clients do not send Origin. Browser origins receive
+            // CORS headers only when explicitly configured.
+            callback(
+                null,
+                origin === undefined || env.CORS_ORIGINS.includes(origin)
+            );
+        },
+        methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+        allowedHeaders: ["Authorization", "Content-Type"],
+        optionsSuccessStatus: 204
     })
 );
 
