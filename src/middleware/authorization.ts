@@ -20,6 +20,7 @@ export const PERMISSIONS = [
     "audit:read",
     "admin:verification_queue",
     "admin:verification_review",
+    "admin:users_read",
     "ein:reveal"
 ] as const;
 
@@ -51,6 +52,7 @@ const rolePermissions: Record<OrganizationRole, ReadonlySet<Permission>> = {
 const platformPermissions: ReadonlySet<Permission> = new Set([
     "admin:verification_queue",
     "admin:verification_review",
+    "admin:users_read",
     "ein:reveal"
 ]);
 

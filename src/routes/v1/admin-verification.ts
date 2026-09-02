@@ -1,4 +1,4 @@
-import { Router, type Response } from "express";
+import { Router, type RequestHandler, type Response } from "express";
 
 import { loadApplicationIdentity } from "../../middleware/application-identity.js";
 import { requireAuthentication } from "../../middleware/authentication.js";
@@ -17,6 +17,14 @@ import {
     type AdminVerificationReviewInput
 } from "../../schemas/admin-verification.js";
 import {
+    adminUsersQuerySchema,
+    type AdminUsersQuery
+} from "../../schemas/admin-users.js";
+import {
+    AdminUserServiceError,
+    listAdminUsers
+} from "../../services/admin-users.js";
+import {
     AdminVerificationServiceError,
     getAdminVerificationCase,
     listAdminVerificationQueue,
@@ -24,6 +32,36 @@ import {
 } from "../../services/admin-verification.js";
 
 const router = Router();
+
+export const createListAdminUsersHandler = (
+    service: typeof listAdminUsers = listAdminUsers
+): RequestHandler => async (_req, res) => {
+    try {
+        const result = await service(
+            res.locals.adminUsersQuery as AdminUsersQuery
+        );
+        res.status(200).json(result);
+    } catch (error) {
+        const unavailable = error instanceof AdminUserServiceError;
+        res.status(unavailable ? 503 : 500).json({
+            error: unavailable
+                ? "ADMIN_USERS_UNAVAILABLE"
+                : "INTERNAL_SERVER_ERROR",
+            message: unavailable
+                ? "Admin user listing is temporarily unavailable."
+                : "An unexpected error occurred."
+        });
+    }
+};
+
+router.get(
+    "/users",
+    requireAuthentication,
+    loadApplicationIdentity,
+    requirePermission("admin:users_read"),
+    validateQuery(adminUsersQuerySchema, "adminUsersQuery"),
+    createListAdminUsersHandler()
+);
 
 const sendAdminVerificationError = (
     res: Response,

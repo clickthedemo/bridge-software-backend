@@ -4,6 +4,8 @@ import test from "node:test";
 process.env.NODE_ENV = "test";
 process.env.SUPABASE_URL = "https://test-project.supabase.co";
 process.env.SUPABASE_ANON_KEY = "test-anon-key";
+process.env.EMAIL_VERIFICATION_REDIRECT_URL =
+    "https://frontend.example.test/login?verified=true";
 process.env.PASSWORD_RESET_REDIRECT_URL = "http://localhost:5173/reset-password";
 
 const { registrationSchema } = await import(
@@ -11,6 +13,7 @@ const { registrationSchema } = await import(
 );
 const {
     buildRegistrationCredentials,
+    buildResendVerificationCredentials,
     classifySupabaseAuthFailure
 } = await import("../src/services/authentication.js");
 const { authFailureStatus } = await import("../src/routes/v1/auth.js");
@@ -56,8 +59,9 @@ test("registration accepts and normalizes displayName", () => {
     });
     assert.equal(input.email, "user@example.com");
     assert.equal(input.displayName, "Miraj Mor");
-    assert.deepEqual(buildRegistrationCredentials(input).options.data, {
-        display_name: "Miraj Mor"
+    assert.deepEqual(buildRegistrationCredentials(input).options, {
+        emailRedirectTo: "https://frontend.example.test/login?verified=true",
+        data: { display_name: "Miraj Mor" }
     });
 });
 
@@ -67,5 +71,21 @@ test("registration remains valid without displayName", () => {
         password: "ExamplePassword123!"
     });
     assert.equal(input.displayName, undefined);
-    assert.equal("options" in buildRegistrationCredentials(input), false);
+    assert.deepEqual(buildRegistrationCredentials(input).options, {
+        emailRedirectTo: "https://frontend.example.test/login?verified=true"
+    });
+});
+
+test("resend verification uses the configured email redirect", () => {
+    assert.deepEqual(
+        buildResendVerificationCredentials({ email: "user@example.com" }),
+        {
+            type: "signup",
+            email: "user@example.com",
+            options: {
+                emailRedirectTo:
+                    "https://frontend.example.test/login?verified=true"
+            }
+        }
+    );
 });

@@ -74,17 +74,26 @@ const providerFailure = (): never => {
 export const buildRegistrationCredentials = (input: RegistrationInput) => {
     const credentials = { email: input.email, password: input.password };
 
-    if (input.displayName === undefined) return credentials;
-
     return {
         ...credentials,
         options: {
+            emailRedirectTo: env.EMAIL_VERIFICATION_REDIRECT_URL,
             // Profile creation is trigger-owned; use the snake_case metadata key
             // expected when auth.users is projected into public.user_profiles.
-            data: { display_name: input.displayName }
+            ...(input.displayName === undefined
+                ? {}
+                : { data: { display_name: input.displayName } })
         }
     };
 };
+
+export const buildResendVerificationCredentials = (input: EmailRequestInput) => ({
+    type: "signup" as const,
+    email: input.email,
+    options: {
+        emailRedirectTo: env.EMAIL_VERIFICATION_REDIRECT_URL
+    }
+});
 
 export const register = async (input: RegistrationInput) => {
     const client = createPublicSupabaseClient();
@@ -160,10 +169,9 @@ export const resendVerification = async (
     const client = createPublicSupabaseClient();
 
     try {
-        const { error } = await client.auth.resend({
-            type: "signup",
-            email: input.email
-        });
+        const { error } = await client.auth.resend(
+            buildResendVerificationCredentials(input)
+        );
         if (error) {
             const failure = classifySupabaseAuthFailure(
                 "resend-verification",
