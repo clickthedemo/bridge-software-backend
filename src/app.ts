@@ -21,6 +21,7 @@ app.use(
                 origin === undefined || env.CORS_ORIGINS.includes(origin)
             );
         },
+        credentials: true,
         methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
         allowedHeaders: ["Authorization", "Content-Type"],
         optionsSuccessStatus: 204

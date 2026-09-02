@@ -16,24 +16,16 @@ const optionalEinEncryptionKey = z.preprocess(
     }, "EIN_ENCRYPTION_KEY must be a base64 encoded 32-byte key.").optional()
 );
 
-export const corsOriginsSchema = z.string().transform((value, context) => {
+const corsOriginsSchema = z.string().transform((value, context) => {
     const origins = value
         .split(",")
         .map((origin) => origin.trim())
         .filter(Boolean);
 
-    const hasInvalidOrigin = origins.some((origin) => {
-        if (!z.url().safeParse(origin).success || origin.includes("*")) return true;
-
-        const parsed = new URL(origin);
-        return parsed.origin !== origin || parsed.username !== "" || parsed.password !== "";
-    });
-
-    if (origins.length === 0 || hasInvalidOrigin) {
+    if (origins.length === 0 || origins.some((origin) => !z.url().safeParse(origin).success)) {
         context.addIssue({
             code: "custom",
-            message:
-                "CORS_ORIGINS must contain one or more comma-separated URL origins."
+            message: "CORS_ORIGINS must contain one or more comma-separated URLs."
         });
         return z.NEVER;
     }
