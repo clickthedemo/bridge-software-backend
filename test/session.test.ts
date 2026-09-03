@@ -33,7 +33,7 @@ const identity = {
     }]
 };
 
-test("missing bearer token returns 401", async () => {
+test("missing authentication credential returns 401", async () => {
     let status = 0;
     let body: unknown;
     await requireAuthentication(
@@ -47,7 +47,7 @@ test("missing bearer token returns 401", async () => {
     assert.equal(status, 401);
     assert.deepEqual(body, {
         error: "UNAUTHORIZED",
-        message: "A valid Bearer access token is required."
+        message: "A valid authentication credential is required."
     });
 });
 
@@ -60,7 +60,7 @@ test("invalid bearer token returns 401", async (context) => {
     let status = 0;
     let body: unknown;
     await requireAuthentication(
-        { get: () => "Bearer invalid-token" } as never,
+        { get: (name: string) => name === "authorization" ? "Bearer invalid-token" : undefined } as never,
         {
             status(value: number) { status = value; return this; },
             json(value: unknown) { body = value; return this; }
@@ -70,8 +70,133 @@ test("invalid bearer token returns 401", async (context) => {
     assert.equal(status, 401);
     assert.deepEqual(body, {
         error: "UNAUTHORIZED",
-        message: "A valid Bearer access token is required."
+        message: "A valid authentication credential is required."
     });
+});
+
+test("access-token cookie authenticates through existing Supabase validation", async (context) => {
+    const { supabase } = await import("../src/lib/supabase.js");
+    const user = { id: userId, email: "user@example.com" };
+    context.mock.method(supabase.auth, "getUser", async (token: string) => ({
+        data: { user: token === "cookie-access" ? user : null },
+        error: null
+    }) as never);
+    let nextCalled = false;
+    const request = {
+        get(name: string) {
+            return name === "cookie" ? "bridge_access_token=cookie-access" : undefined;
+        }
+    } as never;
+    await requireAuthentication(
+        request,
+        {} as never,
+        (() => { nextCalled = true; }) as never
+    );
+    assert.equal(nextCalled, true);
+    assert.equal((request as { authentication?: { transport: string } }).authentication?.transport, "cookie");
+});
+
+test("malformed cookie credentials return 401", async () => {
+    let status = 0;
+    await requireAuthentication(
+        {
+            get(name: string) {
+                return name === "cookie"
+                    ? "bridge_access_token=%E0%A4%A"
+                    : undefined;
+            }
+        } as never,
+        {
+            status(value: number) { status = value; return this; },
+            json() { return this; }
+        } as never,
+        (() => assert.fail("next must not be called")) as never
+    );
+    assert.equal(status, 401);
+});
+
+test("explicit invalid bearer token never falls back to valid cookies", async (context) => {
+    const { supabase } = await import("../src/lib/supabase.js");
+    const validatedTokens: string[] = [];
+    context.mock.method(supabase.auth, "getUser", async (token: string) => {
+        validatedTokens.push(token);
+        return { data: { user: null }, error: { message: "invalid token" } } as never;
+    });
+    let status = 0;
+    await requireAuthentication(
+        {
+            get(name: string) {
+                if (name === "authorization") return "Bearer forged-token";
+                if (name === "cookie") {
+                    return "bridge_access_token=valid-cookie; bridge_refresh_token=valid-refresh";
+                }
+                return undefined;
+            }
+        } as never,
+        {
+            status(value: number) { status = value; return this; },
+            json() { return this; }
+        } as never,
+        (() => assert.fail("next must not be called")) as never
+    );
+    assert.equal(status, 401);
+    assert.deepEqual(validatedTokens, ["forged-token"]);
+});
+
+test("expired cookie session rotation replaces both auth cookies", async (context) => {
+    const { supabase, createPublicSupabaseClient } = await import(
+        "../src/lib/supabase.js"
+    );
+    context.mock.method(supabase.auth, "getUser", async () => ({
+        data: { user: null }, error: { message: "expired" }
+    }) as never);
+    const authPrototype = Object.getPrototypeOf(createPublicSupabaseClient().auth);
+    context.mock.method(authPrototype, "refreshSession", async (input: unknown) => {
+        assert.deepEqual(input, { refresh_token: "old-refresh" });
+        return {
+            data: {
+                user: { id: userId, email: "user@example.com" },
+                session: {
+                    access_token: "new-access",
+                    refresh_token: "new-refresh",
+                    expires_in: 3600
+                }
+            },
+            error: null
+        } as never;
+    });
+    const cookies: Array<{ name: string; value: string }> = [];
+    const request = {
+        get(name: string) {
+            return name === "cookie"
+                ? "bridge_access_token=expired-access; bridge_refresh_token=old-refresh"
+                : undefined;
+        }
+    } as never;
+    let nextCalled = false;
+    await requireAuthentication(
+        request,
+        {
+            cookie(name: string, value: string) {
+                cookies.push({ name, value }); return this;
+            }
+        } as never,
+        (() => { nextCalled = true; }) as never
+    );
+    assert.equal(nextCalled, true);
+    assert.deepEqual(cookies, [
+        { name: "bridge_access_token", value: "new-access" },
+        { name: "bridge_refresh_token", value: "new-refresh" }
+    ]);
+    assert.deepEqual(
+        (request as { authentication?: Record<string, unknown> }).authentication,
+        {
+            user: { id: userId, email: "user@example.com" },
+            accessToken: "new-access",
+            refreshToken: "new-refresh",
+            transport: "cookie"
+        }
+    );
 });
 
 test("normal authenticated identity produces stable session claims", () => {

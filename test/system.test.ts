@@ -92,6 +92,8 @@ for (const origin of [
             headers: { Origin: origin }
         });
         assert.equal(response.headers.get("access-control-allow-origin"), origin);
+        assert.equal(response.headers.get("access-control-allow-credentials"), "true");
+        assert.match(response.headers.get("vary") ?? "", /(?:^|,\s*)Origin(?:,|$)/i);
     });
 }
 
@@ -113,7 +115,8 @@ test("allowed CORS preflight supports Authorization and required methods", async
         }
     });
     assert.equal(response.status, 204);
-    assert.equal(response.headers.has("access-control-allow-credentials"), false);
+    assert.equal(response.headers.get("access-control-allow-credentials"), "true");
+    assert.match(response.headers.get("vary") ?? "", /(?:^|,\s*)Origin(?:,|$)/i);
     assert.equal(
         response.headers.get("access-control-allow-origin"),
         "http://localhost:3000"

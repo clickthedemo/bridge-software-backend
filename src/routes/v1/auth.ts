@@ -1,8 +1,13 @@
-import { Router, type Response } from "express";
+import { Router, type RequestHandler, type Response } from "express";
 
 import { requireAuthentication } from "../../middleware/authentication.js";
 import { loadApplicationIdentity } from "../../middleware/application-identity.js";
 import { validateBody } from "../../middleware/validation.js";
+import {
+    clearAuthCookies,
+    getCookieAuthTokens,
+    setAuthCookies
+} from "../../http/auth-cookies.js";
 import {
     emailRequestSchema,
     loginSchema,
@@ -16,6 +21,7 @@ import {
 import {
     AuthenticationServiceError,
     login,
+    logout,
     register,
     requestPasswordReset,
     resendVerification,
@@ -76,14 +82,34 @@ router.post("/register", validateBody(registrationSchema), async (req, res) => {
     }
 });
 
-router.post("/login", validateBody(loginSchema), async (req, res) => {
+export const createLoginHandler = (
+    service: typeof login = login
+): RequestHandler => async (req, res) => {
     try {
-        const result = await login(req.body as LoginInput);
+        const result = await service(req.body as LoginInput);
+        setAuthCookies(res, result);
         res.status(200).json(result);
     } catch (error) {
         sendAuthFailure(res, error);
     }
-});
+};
+
+router.post("/login", validateBody(loginSchema), createLoginHandler());
+
+export const createLogoutHandler = (
+    service: typeof logout = logout
+): RequestHandler => async (req, res) => {
+    const bearerToken = req.get("authorization")?.match(/^Bearer\s+(\S+)$/i)?.[1];
+    const cookieTokens = getCookieAuthTokens(req);
+    clearAuthCookies(res);
+    await service(
+        bearerToken ?? cookieTokens.accessToken,
+        cookieTokens.refreshToken
+    );
+    res.status(204).send();
+};
+
+router.post("/logout", createLogoutHandler());
 
 router.post(
     "/resend-verification",

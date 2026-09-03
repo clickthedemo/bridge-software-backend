@@ -18,6 +18,14 @@ const {
     classifySupabaseAuthFailure
 } = await import("../src/services/authentication.js");
 const { authFailureStatus } = await import("../src/routes/v1/auth.js");
+const { createLoginHandler, createLogoutHandler } = await import(
+    "../src/routes/v1/auth.js"
+);
+const {
+    ACCESS_TOKEN_COOKIE,
+    REFRESH_TOKEN_COOKIE,
+    getCookieSecurity
+} = await import("../src/http/auth-cookies.js");
 
 test("registration rate limits retain HTTP 429 semantics", () => {
     const error = classifySupabaseAuthFailure(
@@ -89,4 +97,76 @@ test("resend verification uses the configured email redirect", () => {
             }
         }
     );
+});
+
+test("successful login issues HttpOnly cookie credentials and preserves token response", async () => {
+    const result = {
+        accessToken: "access-secret",
+        refreshToken: "refresh-secret",
+        expiresAt: 1234,
+        expiresIn: 3600,
+        tokenType: "bearer",
+        user: { id: "11111111-1111-4111-8111-111111111111", email: "user@example.com" }
+    };
+    const cookies: Array<{ name: string; value: string; options: Record<string, unknown> }> = [];
+    let body: unknown;
+    await createLoginHandler(async () => result)(
+        { body: { email: "user@example.com", password: "secret" } } as never,
+        {
+            cookie(name: string, value: string, options: Record<string, unknown>) {
+                cookies.push({ name, value, options }); return this;
+            },
+            status() { return this; },
+            json(value: unknown) { body = value; return this; }
+        } as never,
+        (() => undefined) as never
+    );
+    assert.deepEqual(body, result);
+    assert.deepEqual(cookies.map(({ name }) => name), [
+        ACCESS_TOKEN_COOKIE, REFRESH_TOKEN_COOKIE
+    ]);
+    for (const cookie of cookies) {
+        assert.equal(cookie.options.httpOnly, true);
+        assert.equal(cookie.options.path, "/api/v1");
+        assert.equal(cookie.options.sameSite, "lax");
+        assert.equal(cookie.options.secure, false);
+    }
+    assert.equal(cookies[0]?.options.maxAge, 3_600_000);
+    assert.equal("maxAge" in cookies[1]!.options, false);
+});
+
+test("production cookie transport is Secure and SameSite=None", () => {
+    assert.deepEqual(getCookieSecurity("production"), {
+        secure: true,
+        sameSite: "none"
+    });
+});
+
+test("logout clears both cookies with matching attributes and revokes provider session", async () => {
+    const cleared: Array<{ name: string; options: Record<string, unknown> }> = [];
+    let revoked: unknown[] = [];
+    let status = 0;
+    await createLogoutHandler(async (...tokens) => { revoked = tokens; })(
+        {
+            get(name: string) {
+                return name === "cookie"
+                    ? `${ACCESS_TOKEN_COOKIE}=access; ${REFRESH_TOKEN_COOKIE}=refresh`
+                    : undefined;
+            }
+        } as never,
+        {
+            clearCookie(name: string, options: Record<string, unknown>) {
+                cleared.push({ name, options }); return this;
+            },
+            status(value: number) { status = value; return this; },
+            send() { return this; }
+        } as never,
+        (() => undefined) as never
+    );
+    assert.equal(status, 204);
+    assert.deepEqual(revoked, ["access", "refresh"]);
+    assert.deepEqual(cleared.map(({ name }) => name), [
+        ACCESS_TOKEN_COOKIE, REFRESH_TOKEN_COOKIE
+    ]);
+    for (const cookie of cleared) assert.equal(cookie.options.path, "/api/v1");
 });

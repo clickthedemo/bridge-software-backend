@@ -38,3 +38,6 @@ coverage/
 
 # Local Supabase
 .supabase/
+docs/INTEGRATION-API-CONTRACT.md
+.gitignore
+docs/INTEGRATION-PIPELINE.md

@@ -163,6 +163,33 @@ export const login = async (input: LoginInput) => {
     }
 };
 
+export const logout = async (
+    accessToken?: string,
+    refreshToken?: string
+): Promise<void> => {
+    if (!refreshToken) return;
+
+    const client = createPublicSupabaseClient();
+    try {
+        if (accessToken) {
+            const established = await client.auth.setSession({
+                access_token: accessToken,
+                refresh_token: refreshToken
+            });
+            if (established.error) return;
+        } else {
+            const refreshed = await client.auth.refreshSession({
+                refresh_token: refreshToken
+            });
+            if (refreshed.error) return;
+        }
+        await client.auth.signOut({ scope: "local" });
+    } catch {
+        // Logout is intentionally idempotent. Cookies are cleared by the route
+        // even when the upstream session is already invalid or unavailable.
+    }
+};
+
 export const resendVerification = async (
     input: EmailRequestInput
 ): Promise<void> => {
