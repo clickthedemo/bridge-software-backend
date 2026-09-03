@@ -3,6 +3,7 @@ import { createPublicSupabaseClient } from "../lib/supabase.js";
 import type {
     EmailRequestInput,
     LoginInput,
+    RecoverySessionInput,
     RegistrationInput,
     ResetPasswordInput
 } from "../schemas/authentication.js";
@@ -249,6 +250,7 @@ export const requestPasswordReset = async (
 export const resetPassword = async (
     userId: string,
     accessToken: string,
+    refreshToken: string,
     input: ResetPasswordInput
 ): Promise<void> => {
     const client = createPublicSupabaseClient();
@@ -260,7 +262,7 @@ export const resetPassword = async (
         const { data: sessionData, error: sessionError } =
             await client.auth.setSession({
                 access_token: accessToken,
-                refresh_token: input.refreshToken
+                refresh_token: refreshToken
             });
 
         if (
@@ -297,4 +299,20 @@ export const resetPassword = async (
         }
         providerFailure();
     }
+};
+
+export const establishRecoverySession = async (input: RecoverySessionInput) => {
+    const client = createPublicSupabaseClient();
+    const { data, error } = await client.auth.setSession({
+        access_token: input.accessToken,
+        refresh_token: input.refreshToken
+    });
+    if (error || !data.session || !data.user) {
+        throw new AuthenticationServiceError("AUTH_PASSWORD_RESET_FAILED");
+    }
+    return {
+        accessToken: data.session.access_token,
+        refreshToken: data.session.refresh_token,
+        expiresIn: data.session.expires_in
+    };
 };
