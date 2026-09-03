@@ -15,6 +15,7 @@ const { sessionHandler } = await import("../src/routes/v1/session.js");
 const { requireAuthentication } = await import(
     "../src/middleware/authentication.js"
 );
+const { createLogoutHandler } = await import("../src/routes/v1/auth.js");
 
 const userId = "11111111-1111-4111-8111-111111111111";
 const organizationId = "22222222-2222-4222-8222-222222222222";
@@ -197,6 +198,41 @@ test("expired cookie session rotation replaces both auth cookies", async (contex
             transport: "cookie"
         }
     );
+});
+
+test("cleared logout cookies cannot authenticate a subsequent request", async () => {
+    const cookieJar = new Map([
+        ["bridge_access_token", "access"],
+        ["bridge_refresh_token", "refresh"]
+    ]);
+    await createLogoutHandler(async () => undefined)(
+        {
+            get(name: string) {
+                if (name !== "cookie") return undefined;
+                return [...cookieJar]
+                    .map(([cookieName, value]) => `${cookieName}=${value}`)
+                    .join("; ");
+            }
+        } as never,
+        {
+            clearCookie(name: string) { cookieJar.delete(name); return this; },
+            status() { return this; },
+            send() { return this; }
+        } as never,
+        (() => undefined) as never
+    );
+
+    let status = 0;
+    await requireAuthentication(
+        { get: () => undefined } as never,
+        {
+            status(value: number) { status = value; return this; },
+            json() { return this; }
+        } as never,
+        (() => assert.fail("next must not be called")) as never
+    );
+    assert.equal(cookieJar.size, 0);
+    assert.equal(status, 401);
 });
 
 test("normal authenticated identity produces stable session claims", () => {

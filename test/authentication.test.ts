@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
+import type { Server } from "node:http";
 import test from "node:test";
+import express from "express";
 
 process.env.NODE_ENV = "test";
 process.env.SUPABASE_URL = "https://test-project.supabase.co";
@@ -15,7 +17,8 @@ const { registrationSchema } = await import(
 const {
     buildRegistrationCredentials,
     buildResendVerificationCredentials,
-    classifySupabaseAuthFailure
+    classifySupabaseAuthFailure,
+    logout
 } = await import("../src/services/authentication.js");
 const { authFailureStatus } = await import("../src/routes/v1/auth.js");
 const { createLoginHandler, createLogoutHandler } = await import(
@@ -135,10 +138,59 @@ test("successful login issues HttpOnly cookie credentials and preserves token re
     assert.equal("maxAge" in cookies[1]!.options, false);
 });
 
-test("production cookie transport is Secure and SameSite=None", () => {
-    assert.deepEqual(getCookieSecurity("production"), {
+test("Express emits both authentication Set-Cookie headers", async () => {
+    const testApp = express();
+    testApp.use(express.json());
+    testApp.post("/api/v1/auth/login", createLoginHandler(async () => ({
+        accessToken: "access-secret",
+        refreshToken: "refresh-secret",
+        expiresAt: 1234,
+        expiresIn: 3600,
+        tokenType: "bearer",
+        user: { id: "11111111-1111-4111-8111-111111111111", email: "user@example.com" }
+    })));
+    const server = await new Promise<Server>((resolve) => {
+        const listening = testApp.listen(0, "127.0.0.1", () => resolve(listening));
+    });
+
+    try {
+        const address = server.address();
+        assert.ok(address && typeof address !== "string");
+        const response = await fetch(
+            `http://127.0.0.1:${address.port}/api/v1/auth/login`,
+            {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ email: "user@example.com", password: "secret" })
+            }
+        );
+        const setCookies = response.headers.getSetCookie();
+        assert.equal(setCookies.length, 2);
+        assert.match(setCookies[0]!, /^bridge_access_token=/);
+        assert.match(setCookies[1]!, /^bridge_refresh_token=/);
+    } finally {
+        await new Promise<void>((resolve, reject) =>
+            server.close((error) => error ? reject(error) : resolve())
+        );
+    }
+});
+
+test("production and staging cookie transport is Secure and SameSite=None", () => {
+    assert.deepEqual(getCookieSecurity("production", undefined), {
         secure: true,
         sameSite: "none"
+    });
+    assert.deepEqual(getCookieSecurity("development", "staging"), {
+        secure: true,
+        sameSite: "none"
+    });
+    assert.deepEqual(getCookieSecurity("development", "production"), {
+        secure: true,
+        sameSite: "none"
+    });
+    assert.deepEqual(getCookieSecurity("development", "development"), {
+        secure: false,
+        sameSite: "lax"
     });
 });
 
@@ -169,4 +221,28 @@ test("logout clears both cookies with matching attributes and revokes provider s
         ACCESS_TOKEN_COOKIE, REFRESH_TOKEN_COOKIE
     ]);
     for (const cookie of cleared) assert.equal(cookie.options.path, "/api/v1");
+});
+
+test("logout revokes only the current Supabase refresh session", async (context) => {
+    const { createPublicSupabaseClient } = await import("../src/lib/supabase.js");
+    const authPrototype = Object.getPrototypeOf(createPublicSupabaseClient().auth);
+    const calls: Array<{ operation: string; value: unknown }> = [];
+    context.mock.method(authPrototype, "setSession", async (tokens: unknown) => {
+        calls.push({ operation: "setSession", value: tokens });
+        return { data: { session: {} }, error: null } as never;
+    });
+    context.mock.method(authPrototype, "signOut", async (options: unknown) => {
+        calls.push({ operation: "signOut", value: options });
+        return { error: null } as never;
+    });
+
+    await logout("access", "refresh");
+
+    assert.deepEqual(calls, [
+        {
+            operation: "setSession",
+            value: { access_token: "access", refresh_token: "refresh" }
+        },
+        { operation: "signOut", value: { scope: "local" } }
+    ]);
 });

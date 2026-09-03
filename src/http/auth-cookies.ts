@@ -5,14 +5,19 @@ import { env } from "../config/index.js";
 export const ACCESS_TOKEN_COOKIE = "bridge_access_token";
 export const REFRESH_TOKEN_COOKIE = "bridge_refresh_token";
 
-export const getCookieSecurity = (nodeEnv: typeof env.NODE_ENV) => nodeEnv === "production"
+export const getCookieSecurity = (
+    nodeEnv: typeof env.NODE_ENV,
+    deploymentEnvironment: typeof env.DEPLOYMENT_ENVIRONMENT
+) => nodeEnv === "production" ||
+    deploymentEnvironment === "staging" ||
+    deploymentEnvironment === "production"
     ? { secure: true, sameSite: "none" as const }
     : { secure: false, sameSite: "lax" as const };
 
 const sharedCookieOptions = {
     httpOnly: true,
     path: "/api/v1",
-    ...getCookieSecurity(env.NODE_ENV)
+    ...getCookieSecurity(env.NODE_ENV, env.DEPLOYMENT_ENVIRONMENT)
 } as const;
 
 export const readCookies = (req: Request): Record<string, string> => {
