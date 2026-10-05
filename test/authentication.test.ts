@@ -102,7 +102,7 @@ test("resend verification uses the configured email redirect", () => {
     );
 });
 
-test("successful login issues HttpOnly cookie credentials and preserves token response", async () => {
+test("successful login returns user only and issues HttpOnly cookie credentials", async () => {
     const result = {
         accessToken: "access-secret",
         refreshToken: "refresh-secret",
@@ -124,9 +124,13 @@ test("successful login issues HttpOnly cookie credentials and preserves token re
         } as never,
         (() => undefined) as never
     );
-    assert.deepEqual(body, result);
-    assert.deepEqual(cookies.map(({ name }) => name), [
-        ACCESS_TOKEN_COOKIE, REFRESH_TOKEN_COOKIE
+    assert.deepEqual(body, { user: result.user });
+    assert.ok(body && typeof body === "object");
+    assert.equal("accessToken" in body, false);
+    assert.equal("refreshToken" in body, false);
+    assert.deepEqual(cookies.map(({ name, value }) => ({ name, value })), [
+        { name: ACCESS_TOKEN_COOKIE, value: "access-secret" },
+        { name: REFRESH_TOKEN_COOKIE, value: "refresh-secret" }
     ]);
     for (const cookie of cookies) {
         assert.equal(cookie.options.httpOnly, true);
@@ -138,7 +142,7 @@ test("successful login issues HttpOnly cookie credentials and preserves token re
     assert.equal("maxAge" in cookies[1]!.options, false);
 });
 
-test("Express emits both authentication Set-Cookie headers", async () => {
+test("Express returns user only and emits both HttpOnly auth cookies", async () => {
     const testApp = express();
     testApp.use(express.json());
     testApp.post("/api/v1/auth/login", createLoginHandler(async () => ({
@@ -164,10 +168,23 @@ test("Express emits both authentication Set-Cookie headers", async () => {
                 body: JSON.stringify({ email: "user@example.com", password: "secret" })
             }
         );
+        const responseBody = await response.json();
         const setCookies = response.headers.getSetCookie();
+
+        assert.deepEqual(responseBody, {
+            user: {
+                id: "11111111-1111-4111-8111-111111111111",
+                email: "user@example.com"
+            }
+        });
+        assert.ok(responseBody && typeof responseBody === "object");
+        assert.equal("accessToken" in responseBody, false);
+        assert.equal("refreshToken" in responseBody, false);
         assert.equal(setCookies.length, 2);
-        assert.match(setCookies[0]!, /^bridge_access_token=/);
-        assert.match(setCookies[1]!, /^bridge_refresh_token=/);
+        assert.match(setCookies[0]!, /^bridge_access_token=access-secret;/);
+        assert.match(setCookies[0]!, /; HttpOnly(?:;|$)/);
+        assert.match(setCookies[1]!, /^bridge_refresh_token=refresh-secret;/);
+        assert.match(setCookies[1]!, /; HttpOnly(?:;|$)/);
     } finally {
         await new Promise<void>((resolve, reject) =>
             server.close((error) => error ? reject(error) : resolve())
