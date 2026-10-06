@@ -57,7 +57,11 @@ const input = {
     slug: "example-business",
     displayName: "Example Business",
     summary: "A concise public summary.",
-    websiteUrl: "https://example.com"
+    story: "Our story.", businessType: "brand" as const,
+    categories: ["Cultivation"], city: "Portland", state: "Oregon", region: "Willamette Valley",
+    publicEmail: "hello@example.com", publicPhone: "+1 503 555 0100",
+    licenseType: "METRC", licenseNumber: "LIC-100",
+    links: [{ type: "website" as const, label: "Website", url: "https://example.com", sortOrder: 0 }]
 };
 
 const protectedProfile = {
@@ -67,7 +71,10 @@ const protectedProfile = {
     slug: input.slug,
     displayName: input.displayName,
     summary: input.summary,
-    websiteUrl: input.websiteUrl,
+    story: input.story, businessType: input.businessType, categories: input.categories,
+    city: input.city, state: input.state, region: input.region,
+    publicContact: { email: input.publicEmail, phone: input.publicPhone },
+    license: { type: input.licenseType, number: input.licenseNumber }, links: input.links,
     logoUrl: null,
     status: "draft" as const,
     hasPublishedVersion: false,
@@ -197,7 +204,7 @@ test("profile schema rejects protected fields and organization identifiers", () 
     }
 });
 
-test("profile schema validates slug and website URL formats", () => {
+test("profile schema validates slug and link URL formats", () => {
     for (const slug of ["Upper-Case", "has spaces", "double--hyphen", "-leading"] ) {
         assert.equal(
             putDirectoryProfileSchema.safeParse({ ...input, slug }).success,
@@ -207,7 +214,7 @@ test("profile schema validates slug and website URL formats", () => {
     assert.equal(
         putDirectoryProfileSchema.safeParse({
             ...input,
-            websiteUrl: "javascript:alert(1)"
+            links: [{ type: "website", label: "Bad", url: "javascript:alert(1)", sortOrder: 0 }]
         }).success,
         false
     );
@@ -288,7 +295,11 @@ test("public projection contains only explicitly safe fields", () => {
         slug: input.slug,
         display_name: input.displayName,
         summary: input.summary,
-        website_url: input.websiteUrl,
+        story: input.story, business_type: "brand", categories: input.categories,
+        city: input.city, state: input.state, region: input.region,
+        public_email: input.publicEmail, public_phone: input.publicPhone,
+        license_type: input.licenseType, license_number: input.licenseNumber,
+        links: input.links, legal_name: "Example Business LLC", dba_name: "Example Business",
         logo_storage_path: null,
         business_name: "Example Business",
         verified: true,
@@ -304,7 +315,11 @@ test("public projection contains only explicitly safe fields", () => {
         slug: input.slug,
         displayName: input.displayName,
         summary: input.summary,
-        websiteUrl: input.websiteUrl,
+        story: input.story, businessType: "brand", categories: input.categories,
+        city: input.city, state: input.state, region: input.region,
+        publicContact: { email: input.publicEmail, phone: input.publicPhone },
+        license: { type: input.licenseType, number: input.licenseNumber }, links: input.links,
+        legalName: "Example Business LLC", dbaName: "Example Business",
         businessName: "Example Business",
         verified: true,
         logoUrl: null
@@ -329,7 +344,9 @@ test("protected projection excludes EIN, provider, evidence, and internal notes"
         slug: input.slug,
         display_name: input.displayName,
         summary: input.summary,
-        website_url: input.websiteUrl,
+        story: input.story, business_type: "brand", city: input.city, state: input.state, region: input.region,
+        public_email: input.publicEmail, public_phone: input.publicPhone,
+        license_type: input.licenseType, license_number: input.licenseNumber,
         logo_storage_path: null,
         status: "draft",
         submitted_at: null,
@@ -347,6 +364,8 @@ test("protected projection excludes EIN, provider, evidence, and internal notes"
             ein_last_four: "1234",
             cannabis_license_number: "private-license"
         },
+        directory_profile_categories: [{ category: "Cultivation", sort_order: 0 }],
+        directory_profile_links: [{ link_type: "website", label: "Website", url: "https://example.com", sort_order: 0 }],
         provider_response: { private: true },
         review_notes: "internal",
         documents: ["private-evidence"]

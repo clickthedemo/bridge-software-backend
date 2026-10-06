@@ -403,19 +403,23 @@ begin
         raise invalid_parameter_value using message = 'A reason is required.';
     end if;
 
-    select dp, o.status, b.status
-    into target_profile, target_organization_status, target_business_status
+    select dp.*
+    into target_profile
     from public.directory_profiles dp
-    join public.organizations o on o.id = dp.organization_id
-    join public.businesses b
-      on b.id = dp.business_id
-     and b.organization_id = dp.organization_id
     where dp.id = p_profile_id
-    for update of dp;
+    for update;
 
     if not found then
         raise no_data_found using message = 'Directory profile not found.';
     end if;
+
+    select o.status, b.status
+    into target_organization_status, target_business_status
+    from public.organizations o
+    join public.businesses b
+      on b.id = target_profile.business_id
+     and b.organization_id = o.id
+    where o.id = target_profile.organization_id;
 
     if p_action = 'approve' and exists (
         select 1

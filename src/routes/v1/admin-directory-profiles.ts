@@ -3,18 +3,42 @@ import { Router, type RequestHandler } from "express";
 import { loadApplicationIdentity } from "../../middleware/application-identity.js";
 import { requireAuthentication } from "../../middleware/authentication.js";
 import { requirePermission } from "../../middleware/authorization.js";
-import { validateBody, validateParams } from "../../middleware/validation.js";
+import { validateBody, validateParams, validateQuery } from "../../middleware/validation.js";
 import {
+    adminDirectoryProfilesQuerySchema,
     directoryProfileAdminParamsSchema,
     directoryProfileReviewReasonSchema,
-    type DirectoryProfileReviewReasonInput
+    type DirectoryProfileReviewReasonInput,
+    type AdminDirectoryProfilesQuery
 } from "../../schemas/directory-profiles.js";
 import {
     reviewDirectoryProfile,
+    listAdminDirectoryProfiles,
     type DirectoryProfileReviewAction
 } from "../../services/directory-profiles.js";
 
 const router = Router();
+
+export const createListAdminDirectoryProfilesHandler = (
+    service: typeof listAdminDirectoryProfiles = listAdminDirectoryProfiles
+): RequestHandler => async (_req, res) => {
+    try {
+        res.status(200).json(await service(res.locals.validatedQuery as AdminDirectoryProfilesQuery));
+    } catch (error) {
+        const code = error instanceof Error && "code" in error ? String(error.code) : "INTERNAL_SERVER_ERROR";
+        res.status(code === "DIRECTORY_PROFILE_REVIEW_UNAVAILABLE" ? 503 : 500).json({
+            error: code, message: "The Directory profile queue could not be loaded."
+        });
+    }
+};
+
+router.get(
+    "/directory-profiles",
+    requireAuthentication, loadApplicationIdentity,
+    requirePermission("admin:directory_review"),
+    validateQuery(adminDirectoryProfilesQuerySchema),
+    createListAdminDirectoryProfilesHandler()
+);
 
 export const createAdminDirectoryReviewHandler = (
     action: DirectoryProfileReviewAction,

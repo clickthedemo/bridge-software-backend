@@ -14,7 +14,7 @@ export const createContactRequestSchema = z.object({
     workEmail: z.email().trim().max(320),
     phoneNumber: z.string().trim().min(7).max(32).regex(/^\+?[0-9 ()-]+$/),
     yearsOfService: z.number().int().min(0).max(80),
-    contactPreference: z.enum(["email", "phone"]),
+    contactPreference: z.enum(["email", "phone", "either"]),
     message: z.string().trim().max(2000).nullable().optional()
 }).strict();
 

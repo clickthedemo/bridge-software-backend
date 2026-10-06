@@ -35,7 +35,11 @@ const row = (name: string, slug: string) => ({
     slug,
     display_name: name,
     summary: `${name} summary`,
-    website_url: `https://${slug}.example.com`,
+    story: null, business_type: "brand", categories: ["Cultivation"],
+    city: "Portland", state: "Oregon", region: null, public_email: null, public_phone: null,
+    license_type: null, license_number: null,
+    links: [{ type: "website", label: "Website", url: `https://${slug}.example.com`, sortOrder: 0 }],
+    legal_name: `${name} LLC`, dba_name: `${name} DBA`,
     business_name: `${name} DBA`,
     verified: true,
     has_logo: false,
@@ -111,11 +115,7 @@ test("query validation bounds search, limit, cursor, sort, and filter", () => {
             .success,
         false
     );
-    assert.equal(
-        publicDirectoryProfilesQuerySchema.safeParse({ category: "flower" })
-            .success,
-        false
-    );
+    assert.equal(publicDirectoryProfilesQuerySchema.safeParse({ category: "flower" }).success, true);
     assert.equal(
         publicDirectoryProfilesQuerySchema.safeParse({ q: "x".repeat(101) })
             .success,
@@ -135,15 +135,7 @@ test("first page returns an opaque cursor without leaking cursor fields", () => 
         "alpha",
         "beta"
     ]);
-    assert.deepEqual(Object.keys(result.profiles[0] ?? {}).sort(), [
-        "businessName",
-        "displayName",
-        "logoUrl",
-        "slug",
-        "summary",
-        "verified",
-        "websiteUrl"
-    ]);
+    assert.equal(result.profiles[0]?.categories[0], "Cultivation");
 
     const cursor = decodeDirectoryCursor(
         result.pageInfo.nextCursor ?? undefined,

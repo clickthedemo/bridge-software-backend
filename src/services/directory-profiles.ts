@@ -9,6 +9,9 @@ import {
 } from "../lib/supabase.js";
 import type {
     DirectoryProfileReviewReasonInput,
+    DirectoryProfileLogoCompleteInput,
+    DirectoryProfileContactRoutingInput,
+    AdminDirectoryProfilesQuery,
     DirectoryProfileLogoUploadInput,
     PublicDirectoryProfilesQuery,
     PutDirectoryProfileInput
@@ -30,7 +33,15 @@ const protectedProfileRowSchema = z.object({
     slug: z.string(),
     display_name: z.string(),
     summary: z.string().nullable(),
-    website_url: z.string().nullable(),
+    story: z.string().nullable(),
+    business_type: z.enum(["brand", "retailer", "dispensary"]).nullable(),
+    city: z.string().nullable(),
+    state: z.string().nullable(),
+    region: z.string().nullable(),
+    public_email: z.string().nullable(),
+    public_phone: z.string().nullable(),
+    license_type: z.string().nullable(),
+    license_number: z.string().nullable(),
     logo_storage_path: z.string().nullable(),
     status: directoryProfileStatusSchema,
     submitted_at: z.string().nullable(),
@@ -45,14 +56,29 @@ const protectedProfileRowSchema = z.object({
         legal_name: z.string(),
         dba_name: z.string().nullable(),
         status: z.enum(["active", "inactive", "archived"])
-    })
+    }),
+    directory_profile_categories: z.array(z.object({ category: z.string(), sort_order: z.number() })),
+    directory_profile_links: z.array(z.object({
+        link_type: z.enum(["website", "menu", "product", "other"]),
+        label: z.string(), url: z.string(), sort_order: z.number()
+    }))
 });
 
 const publicProfileRowSchema = z.object({
     slug: z.string(),
     display_name: z.string(),
     summary: z.string().nullable(),
-    website_url: z.string().nullable(),
+    story: z.string().nullable(),
+    business_type: z.enum(["brand", "retailer", "dispensary"]).nullable(),
+    categories: z.array(z.string()),
+    city: z.string().nullable(), state: z.string().nullable(), region: z.string().nullable(),
+    public_email: z.string().nullable(), public_phone: z.string().nullable(),
+    license_type: z.string().nullable(), license_number: z.string().nullable(),
+    links: z.array(z.object({
+        type: z.enum(["website", "menu", "product", "other"]),
+        label: z.string(), url: z.string(), sortOrder: z.number()
+    })),
+    legal_name: z.string(), dba_name: z.string().nullable(),
     business_name: z.string(),
     verified: z.literal(true),
     has_logo: z.boolean()
@@ -98,7 +124,15 @@ export interface ProtectedDirectoryProfileResponse {
     slug: string;
     displayName: string;
     summary: string | null;
-    websiteUrl: string | null;
+    story: string | null;
+    businessType: "brand" | "retailer" | "dispensary" | null;
+    categories: string[];
+    city: string | null;
+    state: string | null;
+    region: string | null;
+    publicContact: { email: string | null; phone: string | null };
+    license: { type: string | null; number: string | null } | null;
+    links: Array<{ type: "website" | "menu" | "product" | "other"; label: string; url: string; sortOrder: number }>;
     logoUrl: string | null;
     status: z.infer<typeof directoryProfileStatusSchema>;
     hasPublishedVersion: boolean;
@@ -120,7 +154,17 @@ export interface PublicDirectoryProfileResponse {
     slug: string;
     displayName: string;
     summary: string | null;
-    websiteUrl: string | null;
+    story: string | null;
+    businessType: "brand" | "retailer" | "dispensary" | null;
+    categories: string[];
+    city: string | null;
+    state: string | null;
+    region: string | null;
+    publicContact: { email: string | null; phone: string | null };
+    license: { type: string | null; number: string | null } | null;
+    links: Array<{ type: "website" | "menu" | "product" | "other"; label: string; url: string; sortOrder: number }>;
+    legalName: string;
+    dbaName: string | null;
     businessName: string;
     verified: true;
     logoUrl: string | null;
@@ -162,7 +206,19 @@ export const projectProtectedDirectoryProfile = (
         slug: parsed.data.slug,
         displayName: parsed.data.display_name,
         summary: parsed.data.summary,
-        websiteUrl: parsed.data.website_url,
+        story: parsed.data.story,
+        businessType: parsed.data.business_type,
+        categories: parsed.data.directory_profile_categories.sort((a, b) => a.sort_order - b.sort_order).map((item) => item.category),
+        city: parsed.data.city,
+        state: parsed.data.state,
+        region: parsed.data.region,
+        publicContact: { email: parsed.data.public_email, phone: parsed.data.public_phone },
+        license: parsed.data.license_type || parsed.data.license_number
+            ? { type: parsed.data.license_type, number: parsed.data.license_number }
+            : null,
+        links: parsed.data.directory_profile_links.sort((a, b) => a.sort_order - b.sort_order).map((link) => ({
+            type: link.link_type, label: link.label, url: link.url, sortOrder: link.sort_order
+        })),
         logoUrl: parsed.data.logo_storage_path
             ? `/api/v1/organizations/${parsed.data.organization_id}/directory-profile/logo`
             : null,
@@ -195,7 +251,19 @@ export const projectPublicDirectoryProfile = (
         slug: parsed.data.slug,
         displayName: parsed.data.display_name,
         summary: parsed.data.summary,
-        websiteUrl: parsed.data.website_url,
+        story: parsed.data.story,
+        businessType: parsed.data.business_type,
+        categories: parsed.data.categories,
+        city: parsed.data.city,
+        state: parsed.data.state,
+        region: parsed.data.region,
+        publicContact: { email: parsed.data.public_email, phone: parsed.data.public_phone },
+        license: parsed.data.license_type || parsed.data.license_number
+            ? { type: parsed.data.license_type, number: parsed.data.license_number }
+            : null,
+        links: parsed.data.links,
+        legalName: parsed.data.legal_name,
+        dbaName: parsed.data.dba_name,
         businessName: parsed.data.business_name,
         verified: parsed.data.verified,
         logoUrl: parsed.data.has_logo
@@ -211,7 +279,8 @@ const protectedProfileColumns = [
     "slug",
     "display_name",
     "summary",
-    "website_url",
+    "story", "business_type", "city", "state", "region", "public_email", "public_phone",
+    "license_type", "license_number",
     "logo_storage_path",
     "status",
     "submitted_at",
@@ -221,7 +290,9 @@ const protectedProfileColumns = [
     "approved_at",
     "created_at",
     "updated_at",
-    "businesses!inner(id, legal_name, dba_name, status)"
+    "businesses!inner(id, legal_name, dba_name, status)",
+    "directory_profile_categories(category, sort_order)",
+    "directory_profile_links(link_type, label, url, sort_order)"
 ].join(", ");
 
 export const getDirectoryProfile = async (
@@ -274,7 +345,17 @@ export const putDirectoryProfile = async (
         p_slug: input.slug,
         p_display_name: input.displayName,
         p_summary: input.summary ?? null,
-        p_website_url: input.websiteUrl ?? null
+        p_story: input.story ?? null,
+        p_business_type: input.businessType,
+        p_categories: input.categories,
+        p_city: input.city ?? null,
+        p_state: input.state ?? null,
+        p_region: input.region ?? null,
+        p_public_email: input.publicEmail ?? null,
+        p_public_phone: input.publicPhone ?? null,
+        p_license_type: input.licenseType ?? null,
+        p_license_number: input.licenseNumber ?? null,
+        p_links: input.links
     });
 
     if (error) {
@@ -336,7 +417,14 @@ const logoExtensionByContentType: Record<
 };
 
 export interface DirectoryProfileLogoUploadResponse {
+    uploadId: string;
     signedUrl: string;
+    method: "PUT";
+    requiredHeaders: {
+        "Content-Type": string;
+        "cache-control": "max-age=3600";
+        "x-upsert": "false";
+    };
     expiresInSeconds: 7200;
 }
 
@@ -348,6 +436,7 @@ export const createDirectoryProfileLogoUpload = async (
     const profile = await getDirectoryProfile(accessToken, organizationId);
     const extension = logoExtensionByContentType[input.contentType];
     const path = `${organizationId}/${profile.id}/logo/${randomUUID()}.${extension}`;
+    const uploadId = randomUUID();
     const admin = getAdminClient();
     const { data, error } = await admin.storage
         .from("directory-media")
@@ -359,16 +448,58 @@ export const createDirectoryProfileLogoUpload = async (
         );
     }
 
-    const client = createUserScopedSupabaseClient(accessToken);
-    const { error: updateError } = await client.rpc("set_directory_profile_logo", {
-        p_organization_id: organizationId,
-        p_logo_storage_path: path
+    const { error: pendingError } = await admin.from("directory_profile_pending_uploads").insert({
+        id: uploadId, profile_id: profile.id, organization_id: organizationId,
+        storage_path: path, content_type: input.contentType, file_size: input.fileSize
     });
-    if (updateError) {
+    if (pendingError) {
         throw new DirectoryProfileServiceError("DIRECTORY_PROFILE_WRITE_FAILED");
     }
 
-    return { signedUrl: data.signedUrl, expiresInSeconds: 7200 };
+    return {
+        uploadId, signedUrl: data.signedUrl, method: "PUT",
+        requiredHeaders: {
+            "Content-Type": input.contentType,
+            "cache-control": "max-age=3600",
+            "x-upsert": "false"
+        },
+        expiresInSeconds: 7200
+    };
+};
+
+const pendingUploadSchema = z.object({
+    profile_id: z.uuid(), organization_id: z.uuid(), storage_path: z.string(),
+    content_type: z.string(), file_size: z.number(), completed_at: z.string().nullable()
+});
+
+export const completeDirectoryProfileLogoUpload = async (
+    accessToken: string,
+    organizationId: string,
+    input: DirectoryProfileLogoCompleteInput
+): Promise<ProtectedDirectoryProfileResponse> => {
+    await getDirectoryProfile(accessToken, organizationId);
+    const admin = getAdminClient();
+    const { data, error } = await admin.from("directory_profile_pending_uploads")
+        .select("profile_id, organization_id, storage_path, content_type, file_size, completed_at")
+        .eq("id", input.uploadId).eq("organization_id", organizationId).maybeSingle();
+    const pending = pendingUploadSchema.safeParse(data);
+    if (error || !pending.success || pending.data.completed_at) {
+        throw new DirectoryProfileServiceError("DIRECTORY_PROFILE_MEDIA_UNAVAILABLE");
+    }
+    const slash = pending.data.storage_path.lastIndexOf("/");
+    const prefix = pending.data.storage_path.slice(0, slash);
+    const filename = pending.data.storage_path.slice(slash + 1);
+    const listed = await admin.storage.from("directory-media").list(prefix, { search: filename, limit: 2 });
+    const object = listed.data?.find((candidate) => candidate.name === filename);
+    if (listed.error || !object) {
+        throw new DirectoryProfileServiceError("DIRECTORY_PROFILE_MEDIA_UNAVAILABLE");
+    }
+    const client = createUserScopedSupabaseClient(accessToken);
+    const { error: updateError } = await client.rpc("complete_directory_profile_logo_upload", {
+        p_organization_id: organizationId, p_upload_id: input.uploadId
+    });
+    if (updateError) throw new DirectoryProfileServiceError("DIRECTORY_PROFILE_WRITE_FAILED");
+    return getDirectoryProfile(accessToken, organizationId);
 };
 
 export const deleteDirectoryProfileLogo = async (
@@ -507,6 +638,11 @@ export const listPublicDirectoryProfiles = async (
     const { data, error } = await client.rpc("list_public_directory_profiles", {
         p_query: query.q || null,
         p_organization_type: query.organizationType ?? null,
+        p_category: query.category ?? null,
+        p_state: query.state ?? null,
+        p_city: query.city ?? null,
+        p_region: query.region ?? null,
+        p_verified: query.verified ?? null,
         p_sort: query.sort,
         p_cursor_name: cursor?.name ?? null,
         p_cursor_slug: cursor?.slug ?? null,
@@ -518,6 +654,107 @@ export const listPublicDirectoryProfiles = async (
     }
 
     return projectPublicDirectoryProfilesPage(data ?? [], query);
+};
+
+const adminQueueRowSchema = z.object({
+    profile_id: z.uuid(), organization_id: z.uuid(), organization_name: z.string(),
+    business_id: z.uuid(), legal_name: z.string(), dba_name: z.string().nullable(),
+    display_name: z.string(), slug: z.string(), summary: z.string().nullable(), story: z.string().nullable(),
+    business_type: z.enum(["brand", "retailer", "dispensary"]).nullable(), categories: z.array(z.string()),
+    city: z.string().nullable(), state: z.string().nullable(), region: z.string().nullable(),
+    public_email: z.string().nullable(), public_phone: z.string().nullable(),
+    license_type: z.string().nullable(), license_number: z.string().nullable(),
+    links: z.array(z.object({ type: z.enum(["website", "menu", "product", "other"]), label: z.string(), url: z.string(), sortOrder: z.number() })),
+    has_logo: z.boolean(), status: directoryProfileStatusSchema,
+    submitted_at: z.string().nullable(), has_published_version: z.boolean(),
+    ein_verified: z.boolean(), organization_active: z.boolean(), business_active: z.boolean()
+});
+
+export const listAdminDirectoryProfiles = async (query: AdminDirectoryProfilesQuery) => {
+    const { data, error } = await getAdminClient().rpc("list_admin_directory_profiles", {
+        p_status: query.status ?? null, p_limit: query.limit + 1, p_offset: query.offset
+    });
+    if (error) throw new DirectoryProfileServiceError("DIRECTORY_PROFILE_REVIEW_UNAVAILABLE");
+    const parsed = z.array(adminQueueRowSchema).safeParse(data ?? []);
+    if (!parsed.success) throw new DirectoryProfileServiceError("INTERNAL_SERVER_ERROR");
+    const hasMore = parsed.data.length > query.limit;
+    return {
+        profiles: parsed.data.slice(0, query.limit).map((row) => ({
+            id: row.profile_id,
+            organization: { id: row.organization_id, name: row.organization_name },
+            business: { id: row.business_id, legalName: row.legal_name, dbaName: row.dba_name },
+            workingProfile: {
+                slug: row.slug, displayName: row.display_name, summary: row.summary, story: row.story,
+                businessType: row.business_type, categories: row.categories,
+                city: row.city, state: row.state, region: row.region,
+                publicContact: { email: row.public_email, phone: row.public_phone },
+                license: row.license_type || row.license_number
+                    ? { type: row.license_type, number: row.license_number }
+                    : null,
+                links: row.links,
+                hasLogo: row.has_logo
+            },
+            status: row.status,
+            submittedAt: row.submitted_at,
+            hasPublishedVersion: row.has_published_version,
+            verificationEligibility: {
+                eligible: row.ein_verified && row.organization_active && row.business_active,
+                einVerified: row.ein_verified,
+                organizationActive: row.organization_active,
+                businessActive: row.business_active
+            }
+        })),
+        pageInfo: { limit: query.limit, offset: query.offset, hasMore }
+    };
+};
+
+const routingRowSchema = z.object({
+    sales_representative_membership_id: z.uuid().nullable(),
+    sales_representative_user_id: z.uuid().nullable(),
+    sales_representative_display_name: z.string().nullable(),
+    bridge_admin_user_id: z.uuid().nullable(),
+    bridge_admin_display_name: z.string().nullable()
+});
+
+const projectContactRouting = (row: unknown) => {
+    const parsed = routingRowSchema.safeParse(row);
+    if (!parsed.success) throw new DirectoryProfileServiceError("INTERNAL_SERVER_ERROR");
+    return {
+        salesRepresentative: parsed.data.sales_representative_membership_id ? {
+            membershipId: parsed.data.sales_representative_membership_id,
+            userId: parsed.data.sales_representative_user_id,
+            displayName: parsed.data.sales_representative_display_name
+        } : null,
+        bridgeAdmin: parsed.data.bridge_admin_user_id ? {
+            userId: parsed.data.bridge_admin_user_id,
+            displayName: parsed.data.bridge_admin_display_name
+        } : null
+    };
+};
+
+export const getDirectoryProfileContactRouting = async (accessToken: string, organizationId: string) => {
+    const { data, error } = await createUserScopedSupabaseClient(accessToken)
+        .rpc("get_directory_profile_contact_routing", { p_organization_id: organizationId }).single();
+    if (error) throw new DirectoryProfileServiceError("DIRECTORY_PROFILE_READ_FAILED");
+    return projectContactRouting(data);
+};
+
+export const putDirectoryProfileContactRouting = async (
+    accessToken: string, organizationId: string, input: DirectoryProfileContactRoutingInput
+) => {
+    const { data, error } = await createUserScopedSupabaseClient(accessToken)
+        .rpc("set_directory_profile_contact_routing", {
+            p_organization_id: organizationId,
+            p_sales_representative_membership_id: input.salesRepresentativeMembershipId,
+            p_bridge_admin_user_id: input.bridgeAdminUserId
+        }).single();
+    if (error) {
+        if (error.code === "23503" || error.code === "55000") {
+            throw new DirectoryProfileServiceError("DIRECTORY_PROFILE_BUSINESS_MISMATCH");
+        }
+        throw new DirectoryProfileServiceError("DIRECTORY_PROFILE_WRITE_FAILED");
+    }
+    return projectContactRouting(data);
 };
 
 const getAdminClient = () => {

@@ -20,7 +20,7 @@ const inboundRowSchema = z.object({
     request_id: z.uuid(), request_status: statusSchema,
     routing_status: routingStatusSchema,
     first_name: z.string(), work_email: z.string(), phone_number: z.string(),
-    years_of_service: z.number(), contact_preference: z.enum(["email", "phone"]),
+    years_of_service: z.number(), contact_preference: z.enum(["email", "phone", "either"]),
     message: z.string().nullable(), created_at: z.string(), updated_at: z.string()
 });
 const sentRowSchema = z.object({
@@ -95,20 +95,21 @@ export const listInboundContactRequests = async (
         .rpc("list_inbound_contact_requests", {
             p_organization_id: organizationId,
             p_status: query.status ?? null,
-            p_limit: query.limit,
+            p_limit: query.limit + 1,
             p_offset: query.offset
         });
     if (error) return mapRpcError(error);
     const parsed = z.array(inboundRowSchema).safeParse(data ?? []);
     if (!parsed.success) throw new ContactRequestServiceError("CONTACT_REQUEST_FAILED");
-    return { requests: parsed.data.map((row) => ({
+    const hasMore = parsed.data.length > query.limit;
+    return { requests: parsed.data.slice(0, query.limit).map((row) => ({
         id: row.request_id, status: row.request_status,
         routingStatus: row.routing_status, firstName: row.first_name,
         workEmail: row.work_email, phoneNumber: row.phone_number,
         yearsOfService: row.years_of_service,
         contactPreference: row.contact_preference, message: row.message,
         createdAt: row.created_at, updatedAt: row.updated_at
-    })) };
+    })), pageInfo: { limit: query.limit, offset: query.offset, hasMore } };
 };
 
 export const listSentContactRequests = async (
@@ -117,19 +118,20 @@ export const listSentContactRequests = async (
 ) => {
     const { data, error } = await createUserScopedSupabaseClient(accessToken)
         .rpc("list_sent_contact_requests", {
-            p_limit: query.limit,
+            p_limit: query.limit + 1,
             p_offset: query.offset
         });
     if (error) return mapRpcError(error);
     const parsed = z.array(sentRowSchema).safeParse(data ?? []);
     if (!parsed.success) throw new ContactRequestServiceError("CONTACT_REQUEST_FAILED");
-    return { requests: parsed.data.map((row) => ({
+    const hasMore = parsed.data.length > query.limit;
+    return { requests: parsed.data.slice(0, query.limit).map((row) => ({
         id: row.request_id,
         target: { slug: row.target_slug, displayName: row.target_display_name },
         status: row.request_status,
         createdAt: row.created_at,
         updatedAt: row.updated_at
-    })) };
+    })), pageInfo: { limit: query.limit, offset: query.offset, hasMore } };
 };
 
 export const transitionContactRequest = async (

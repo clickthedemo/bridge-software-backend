@@ -11,6 +11,7 @@ export const PERMISSIONS = [
     "organization:members_manage",
     "business:read",
     "business:update",
+    "directory_profile:content_update",
     "verification:read",
     "verification:submit",
     "verification:review",
@@ -35,14 +36,20 @@ const rolePermissions: Record<OrganizationRole, ReadonlySet<Permission>> = {
         "organization:members_manage", "business:read", "business:update",
         "verification:read", "verification:submit", "verification:review",
         "document:read", "document:upload", "document:review", "audit:read",
-        "contact_request:read", "contact_request:update"
+        "contact_request:read", "contact_request:update",
+        "directory_profile:content_update"
     ]),
     admin: new Set([
         "organization:read", "organization:update",
         "organization:members_manage", "business:read", "business:update",
         "verification:read", "verification:submit", "verification:review",
         "document:read", "document:upload", "document:review", "audit:read",
-        "contact_request:read", "contact_request:update"
+        "contact_request:read", "contact_request:update",
+        "directory_profile:content_update"
+    ]),
+    page_manager: new Set([
+        "organization:read", "business:read", "verification:read",
+        "document:read", "directory_profile:content_update"
     ]),
     reviewer: new Set([
         "organization:read", "business:read", "verification:read",

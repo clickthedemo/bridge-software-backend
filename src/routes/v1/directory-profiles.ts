@@ -10,16 +10,21 @@ import {
 } from "../../middleware/validation.js";
 import {
     directoryProfileLogoUploadSchema,
+    directoryProfileLogoCompleteSchema,
+    directoryProfileContactRoutingSchema,
     directoryProfileOrganizationParamsSchema,
     publicDirectoryProfilesQuerySchema,
     publicDirectoryProfileParamsSchema,
     putDirectoryProfileSchema,
     type DirectoryProfileLogoUploadInput,
+    type DirectoryProfileLogoCompleteInput,
+    type DirectoryProfileContactRoutingInput,
     type PublicDirectoryProfilesQuery,
     type PutDirectoryProfileInput
 } from "../../schemas/directory-profiles.js";
 import {
     createDirectoryProfileLogoUpload,
+    completeDirectoryProfileLogoUpload,
     deleteDirectoryProfileLogo,
     DirectoryProfileServiceError,
     getDirectoryProfile,
@@ -28,7 +33,9 @@ import {
     listPublicDirectoryProfiles,
     getPublicDirectoryProfile,
     putDirectoryProfile,
-    submitDirectoryProfile
+    submitDirectoryProfile,
+    getDirectoryProfileContactRouting,
+    putDirectoryProfileContactRouting
 } from "../../services/directory-profiles.js";
 
 const router = Router();
@@ -200,6 +207,39 @@ export const createDirectoryProfileLogoUploadHandler = (
     }
 };
 
+export const createDirectoryProfileLogoCompleteHandler = (
+    service: typeof completeDirectoryProfileLogoUpload = completeDirectoryProfileLogoUpload
+): RequestHandler => async (req, res) => {
+    if (!req.authentication) {
+        res.status(401).json({ error: "UNAUTHORIZED", message: "A valid authentication credential is required." });
+        return;
+    }
+    try {
+        const profile = await service(req.authentication.accessToken, req.params.organizationId as string,
+            req.body as DirectoryProfileLogoCompleteInput);
+        res.status(200).json({ profile });
+    } catch (error) { sendDirectoryProfileError(res, error); }
+};
+
+export const createGetDirectoryProfileContactRoutingHandler = (
+    service: typeof getDirectoryProfileContactRouting = getDirectoryProfileContactRouting
+): RequestHandler => async (req, res) => {
+    try {
+        const routing = await service(req.authentication?.accessToken ?? "", req.params.organizationId as string);
+        res.status(200).json({ routing });
+    } catch (error) { sendDirectoryProfileError(res, error); }
+};
+
+export const createPutDirectoryProfileContactRoutingHandler = (
+    service: typeof putDirectoryProfileContactRouting = putDirectoryProfileContactRouting
+): RequestHandler => async (req, res) => {
+    try {
+        const routing = await service(req.authentication?.accessToken ?? "", req.params.organizationId as string,
+            req.body as DirectoryProfileContactRoutingInput);
+        res.status(200).json({ routing });
+    } catch (error) { sendDirectoryProfileError(res, error); }
+};
+
 export const createDeleteDirectoryProfileLogoHandler = (
     service: typeof deleteDirectoryProfileLogo = deleteDirectoryProfileLogo
 ): RequestHandler => async (req, res) => {
@@ -267,7 +307,7 @@ router.put(
     requireAuthentication,
     loadApplicationIdentity,
     validateParams(directoryProfileOrganizationParamsSchema),
-    requirePermission("business:update", organizationIdFromParams),
+    requirePermission("directory_profile:content_update", organizationIdFromParams),
     validateBody(putDirectoryProfileSchema),
     createPutDirectoryProfileHandler()
 );
@@ -282,13 +322,39 @@ router.post(
 );
 
 router.post(
+    "/organizations/:organizationId/directory-profile/logo/complete",
+    requireAuthentication, loadApplicationIdentity,
+    validateParams(directoryProfileOrganizationParamsSchema),
+    requirePermission("directory_profile:content_update", organizationIdFromParams),
+    validateBody(directoryProfileLogoCompleteSchema),
+    createDirectoryProfileLogoCompleteHandler()
+);
+
+router.post(
     "/organizations/:organizationId/directory-profile/logo/upload",
     requireAuthentication,
     loadApplicationIdentity,
     validateParams(directoryProfileOrganizationParamsSchema),
-    requirePermission("business:update", organizationIdFromParams),
+    requirePermission("directory_profile:content_update", organizationIdFromParams),
     validateBody(directoryProfileLogoUploadSchema),
     createDirectoryProfileLogoUploadHandler()
+);
+
+router.get(
+    "/organizations/:organizationId/directory-profile/contact-routing",
+    requireAuthentication, loadApplicationIdentity,
+    validateParams(directoryProfileOrganizationParamsSchema),
+    requirePermission("business:update", organizationIdFromParams),
+    createGetDirectoryProfileContactRoutingHandler()
+);
+
+router.put(
+    "/organizations/:organizationId/directory-profile/contact-routing",
+    requireAuthentication, loadApplicationIdentity,
+    validateParams(directoryProfileOrganizationParamsSchema),
+    requirePermission("business:update", organizationIdFromParams),
+    validateBody(directoryProfileContactRoutingSchema),
+    createPutDirectoryProfileContactRoutingHandler()
 );
 
 router.delete(
@@ -296,7 +362,7 @@ router.delete(
     requireAuthentication,
     loadApplicationIdentity,
     validateParams(directoryProfileOrganizationParamsSchema),
-    requirePermission("business:update", organizationIdFromParams),
+    requirePermission("directory_profile:content_update", organizationIdFromParams),
     createDeleteDirectoryProfileLogoHandler()
 );
 
