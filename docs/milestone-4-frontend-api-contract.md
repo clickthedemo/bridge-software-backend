@@ -57,6 +57,101 @@ Not found (404), transition/conflict (409), and unexpected failure (500):
 
 The exact message may be endpoint-specific. Frontend branching must use `error`, not `message`. A service dependency can also return 503 (`DIRECTORY_PROFILE_MEDIA_UNAVAILABLE` or `DIRECTORY_PROFILE_REVIEW_UNAVAILABLE`). No token is returned in JSON.
 
+## Account settings
+
+### PATCH `/auth/me`
+
+Auth: any authenticated user. This route updates only the authenticated user's `display_name` and `phone`; it cannot change email, password, account type, platform roles, organization memberships, or verification state.
+
+At least one field is required. Unknown fields are rejected. `displayName` is a trimmed string of 1â€“100 characters or `null`; `phone` is a trimmed string of at most 30 characters or `null`. Use `null` to clear either value.
+
+```json
+{
+  "displayName": "Bridge Admin",
+  "phone": "+1 555 0100"
+}
+```
+
+Success 200:
+
+```json
+{
+  "profile": {
+    "displayName": "Bridge Admin",
+    "phone": "+1 555 0100"
+  }
+}
+```
+
+Errors: 400 `VALIDATION_ERROR`, 401 `UNAUTHORIZED`, 500 `ACCOUNT_SETTINGS_UPDATE_FAILED`. The update uses the caller's authenticated Supabase session and remains subject to self-only profile RLS.
+
+## Administrator user accounts
+
+Brand, Retailer, and Dispensary are organization types (`brand | retailer | dispensary`), not user roles. User account type is separately `standard | sales_rep`; the only platform role is `admin`. Organization roles and memberships are assigned through separate organization-membership workflows and are never created by these endpoints.
+
+### GET `/admin/users`
+
+Auth: platform role `admin` / permission `admin:users_read`. Query parameters are `page` (integer, minimum 1, default 1) and `pageSize` (integer, 1â€“100, default 50). Unknown query parameters are rejected.
+
+Success 200:
+
+```json
+{
+  "users": [{
+    "id": "11111111-1111-4111-8111-111111111111",
+    "email": "user@example.com",
+    "displayName": "New User",
+    "emailVerified": false,
+    "createdAt": "2026-10-07T10:00:00.000Z",
+    "lastSignInAt": null,
+    "accountType": "standard",
+    "platformRole": null,
+    "organizationMemberships": [{
+      "organizationId": "22222222-2222-4222-8222-222222222222",
+      "organizationName": "Example Brand",
+      "role": "member"
+    }]
+  }],
+  "pagination": { "page": 1, "pageSize": 50, "total": 1 }
+}
+```
+
+Errors: 400 `VALIDATION_ERROR`, 401 `UNAUTHORIZED`, 403 `FORBIDDEN`, 503 `ADMIN_USERS_UNAVAILABLE`, and 500 `INTERNAL_SERVER_ERROR`.
+
+### POST `/admin/users`
+
+Auth: platform role `admin` / permission `admin:users_write`. Account creation is invitation-based: Supabase sends the user an email so the user, not the administrator, establishes authentication credentials. Administrators never choose or receive another user's password.
+
+```json
+{
+  "email": "new.user@example.com",
+  "displayName": "New User",
+  "accountType": "standard",
+  "platformRole": null
+}
+```
+
+`email` is required, lowercased after trimming, must be a valid address, and is limited to 254 characters. `displayName` is required, trimmed, and 1â€“100 characters. `accountType` is `standard | sales_rep` and defaults to `standard`. `platformRole` is optional and is `admin | null`. Unknown fieldsâ€”including every password fieldâ€”are rejected. This endpoint does not assign an organization membership.
+
+Success 201:
+
+```json
+{
+  "user": {
+    "id": "11111111-1111-4111-8111-111111111111",
+    "email": "new.user@example.com",
+    "displayName": "New User",
+    "accountType": "standard",
+    "platformRole": null,
+    "invitationSent": true
+  }
+}
+```
+
+The backend records an audit event containing only the invited account type and platform role. If profile configuration, platform-role assignment, or audit creation fails, the newly invited Supabase user is deleted so no partial account remains.
+
+Errors: 400 `VALIDATION_ERROR`, 401 `UNAUTHORIZED`, 403 `FORBIDDEN`, 409 `ADMIN_USER_ALREADY_EXISTS`, 500 `ADMIN_USER_INVITATION_FAILED`, and 503 `ADMIN_USERS_UNAVAILABLE`. A 503 means Supabase administration is unavailable or not configured.
+
 ## Canonical Directory profile object
 
 Protected responses use this shape:
