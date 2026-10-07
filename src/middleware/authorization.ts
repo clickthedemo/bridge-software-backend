@@ -25,6 +25,7 @@ export const PERMISSIONS = [
     "admin:verification_review",
     "admin:directory_review",
     "admin:users_read",
+    "admin:users_write",
     "ein:reveal"
 ] as const;
 
@@ -66,6 +67,7 @@ const platformPermissions: ReadonlySet<Permission> = new Set([
     "admin:verification_review",
     "admin:directory_review",
     "admin:users_read",
+    "admin:users_write",
     "ein:reveal"
 ]);
 

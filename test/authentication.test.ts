@@ -11,7 +11,7 @@ process.env.EMAIL_VERIFICATION_REDIRECT_URL =
     "https://frontend.example.test/login?verified=true";
 process.env.PASSWORD_RESET_REDIRECT_URL = "http://localhost:5173/reset-password";
 
-const { registrationSchema } = await import(
+const { accountSettingsSchema, registrationSchema } = await import(
     "../src/schemas/authentication.js"
 );
 const {
@@ -21,7 +21,11 @@ const {
     logout
 } = await import("../src/services/authentication.js");
 const { authFailureStatus } = await import("../src/routes/v1/auth.js");
-const { createLoginHandler, createLogoutHandler } = await import(
+const {
+    createLoginHandler,
+    createLogoutHandler,
+    createUpdateAccountSettingsHandler
+} = await import(
     "../src/routes/v1/auth.js"
 );
 const {
@@ -86,6 +90,63 @@ test("registration remains valid without displayName", () => {
     assert.deepEqual(buildRegistrationCredentials(input).options, {
         emailRedirectTo: "https://frontend.example.test/login?verified=true"
     });
+});
+
+test("empty account settings request is rejected", () => {
+    assert.equal(accountSettingsSchema.safeParse({}).success, false);
+});
+
+test("account settings reject unknown fields such as email", () => {
+    assert.equal(
+        accountSettingsSchema.safeParse({ email: "other@example.com" }).success,
+        false
+    );
+});
+
+test("account setting values are trimmed and may be cleared", () => {
+    assert.deepEqual(
+        accountSettingsSchema.parse({
+            displayName: "  Bridge Admin  ",
+            phone: "  +1 555 0100  "
+        }),
+        { displayName: "Bridge Admin", phone: "+1 555 0100" }
+    );
+    assert.deepEqual(
+        accountSettingsSchema.parse({ displayName: null, phone: null }),
+        { displayName: null, phone: null }
+    );
+});
+
+test("account settings handler scopes the update and returns the profile", async () => {
+    const input = { displayName: "Bridge Admin", phone: "+1 555 0100" };
+    let serviceArguments: unknown[] = [];
+    let status = 0;
+    let body: unknown;
+    await createUpdateAccountSettingsHandler(async (...arguments_) => {
+        serviceArguments = arguments_;
+        return input;
+    })(
+        {
+            authentication: {
+                user: { id: "11111111-1111-4111-8111-111111111111" },
+                accessToken: "authenticated-access-token"
+            },
+            body: input
+        } as never,
+        {
+            status(value: number) { status = value; return this; },
+            json(value: unknown) { body = value; return this; }
+        } as never,
+        (() => undefined) as never
+    );
+
+    assert.deepEqual(serviceArguments, [
+        "11111111-1111-4111-8111-111111111111",
+        "authenticated-access-token",
+        input
+    ]);
+    assert.equal(status, 200);
+    assert.deepEqual(body, { profile: input });
 });
 
 test("resend verification uses the configured email redirect", () => {
